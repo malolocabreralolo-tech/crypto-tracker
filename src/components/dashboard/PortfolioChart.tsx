@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import type { TokenBalance } from "@/types";
 import { ChartSkeleton } from "@/components/common/Skeleton";
 
-type Period = "24H" | "1W" | "1M" | "3M" | "1Y" | "2Y" | "5Y" | "ALL";
+type Period = "24H" | "1W" | "1M" | "3M" | "1Y" | "2Y" | "5Y";
 
 interface PortfolioChartProps {
   balances: TokenBalance[];
@@ -87,7 +87,7 @@ export function PortfolioChart({ balances }: PortfolioChartProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holdingsKey, period]);
 
-  const showYear = period === "2Y" || period === "5Y" || period === "ALL";
+  const showYear = period === "2Y" || period === "5Y";
   const data = history.map((s) => ({
     date: new Date(s.timestamp).toLocaleDateString("en-US", {
       month: "short",
@@ -226,7 +226,7 @@ export function PortfolioChart({ balances }: PortfolioChartProps) {
 
       {/* Period selector */}
       <div className="flex gap-1 mt-4 justify-center">
-        {(["24H", "1W", "1M", "3M", "1Y", "2Y", "5Y", "ALL"] as Period[]).map((p) => (
+        {(["24H", "1W", "1M", "3M", "1Y", "2Y", "5Y"] as Period[]).map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
