@@ -1,33 +1,29 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Key } from "lucide-react";
+import { Save, Key, Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 interface Settings {
-  alchemyApiKey: string;
   heliusApiKey: string;
 }
 
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem("crypto-tracker-settings");
-    if (!raw) return { alchemyApiKey: "", heliusApiKey: "" };
+    if (!raw) return { heliusApiKey: "" };
     const parsed = JSON.parse(raw);
-    return {
-      alchemyApiKey: parsed.alchemyApiKey || "",
-      heliusApiKey: parsed.heliusApiKey || "",
-    };
+    return { heliusApiKey: parsed.heliusApiKey || "" };
   } catch {
-    return { alchemyApiKey: "", heliusApiKey: "" };
+    return { heliusApiKey: "" };
   }
 }
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>({ alchemyApiKey: "", heliusApiKey: "" });
+  const [settings, setSettings] = useState<Settings>({ heliusApiKey: "" });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -51,33 +47,22 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-lg font-bold">Settings</h1>
         <p className="text-xs text-muted-foreground">
-          Configure API keys for data providers
+          Configure API keys and manage data
         </p>
       </div>
 
       <Card className="p-4 space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Key className="h-4 w-4 text-muted-foreground" />
-            <label className="text-xs font-medium">Alchemy API Key</label>
-          </div>
-          <Input
-            type="password"
-            placeholder="Enter your Alchemy API key"
-            value={settings.alchemyApiKey}
-            onChange={(e) => setSettings((s) => ({ ...s, alchemyApiKey: e.target.value }))}
-            className="text-xs font-mono"
-          />
+        <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
+          <Info className="h-4 w-4 text-primary shrink-0" />
           <p className="text-[10px] text-muted-foreground">
-            Required for ETH + L2 balances and transactions.
-            Get a free key at alchemy.com/dashboard
+            EVM chains (Ethereum, Arbitrum, Optimism, Base, Polygon) use free public RPCs — no API key needed.
           </p>
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Key className="h-4 w-4 text-muted-foreground" />
-            <label className="text-xs font-medium">Helius API Key</label>
+            <label className="text-xs font-medium">Helius API Key (Solana)</label>
           </div>
           <Input
             type="password"
@@ -87,8 +72,7 @@ export default function SettingsPage() {
             className="text-xs font-mono"
           />
           <p className="text-[10px] text-muted-foreground">
-            Required for Solana balances and transactions.
-            Get a free key at helius.dev
+            Required for Solana balances and transactions. Get a free key at helius.dev
           </p>
         </div>
 
@@ -103,8 +87,8 @@ export default function SettingsPage() {
           Data Storage
         </h3>
         <p className="text-xs text-muted-foreground">
-          All data is stored locally in your browser (localStorage). Nothing is sent to any server.
-          API keys are only used for direct calls to Alchemy/Helius from your browser.
+          Wallets and portfolio history are stored locally in your browser.
+          API keys for Solana are configured server-side. No data leaves your browser except blockchain RPC calls.
         </p>
         <Button
           variant="destructive"

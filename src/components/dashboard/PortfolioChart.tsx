@@ -35,10 +35,22 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
       ? history
       : history.filter((s) => now - s.timestamp < periodMs[period]);
 
-  const data = filtered.map((s) => ({
+  // If only 1 snapshot, duplicate it to draw a flat line
+  let chartSnapshots = filtered;
+  if (filtered.length === 1) {
+    const s = filtered[0];
+    chartSnapshots = [
+      { ...s, timestamp: s.timestamp - 3600000 },
+      s,
+    ];
+  }
+
+  const data = chartSnapshots.map((s) => ({
     date: new Date(s.timestamp).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
     }),
     value: s.totalValueUsd,
     timestamp: s.timestamp,
@@ -52,9 +64,21 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-          Portfolio Evolution
-        </h3>
+        <div className="flex items-center gap-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Portfolio Evolution
+          </h3>
+          {data.length >= 2 && filtered.length >= 2 && (
+            <span
+              className={cn(
+                "text-xs font-bold",
+                isUp ? "text-[var(--color-gain)]" : "text-[var(--color-loss)]"
+              )}
+            >
+              {isUp ? "+" : ""}{change.toFixed(2)}%
+            </span>
+          )}
+        </div>
         <div className="flex gap-1">
           {(["7d", "30d", "90d", "all"] as Period[]).map((p) => (
             <button
@@ -73,9 +97,9 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
         </div>
       </div>
 
-      {data.length < 2 ? (
+      {data.length === 0 ? (
         <div className="h-[200px] flex items-center justify-center text-xs text-muted-foreground">
-          Need more snapshots to show chart. Refresh periodically to build history.
+          Add a wallet and refresh to start tracking portfolio value.
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>

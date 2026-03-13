@@ -74,15 +74,19 @@ export function usePortfolio() {
     }
   }, [loaded, wallets.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save snapshot when value changes
+  // Save snapshot when value changes — at most one per 5 minutes
   useEffect(() => {
     if (totalValue > 0 && lastUpdated) {
+      const lastSnapshot = history[history.length - 1];
+      const minInterval = 5 * 60 * 1000; // 5 minutes
+      if (lastSnapshot && lastUpdated - lastSnapshot.timestamp < minInterval) return;
+
       const snapshot: PortfolioSnapshot = {
         timestamp: lastUpdated,
         totalValueUsd: totalValue,
         byChain: byChain as Record<Chain, number>,
       };
-      const updated = [...history.filter((h) => h.timestamp !== lastUpdated), snapshot];
+      const updated = [...history, snapshot];
       setHistory(updated);
       saveHistory(updated);
     }
