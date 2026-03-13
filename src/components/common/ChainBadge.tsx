@@ -10,6 +10,7 @@ const chainColors: Record<Chain, string> = {
   base: "bg-blue-600/20 text-blue-300",
   polygon: "bg-purple-500/20 text-purple-400",
   solana: "bg-gradient-to-r from-purple-500/20 to-teal-500/20 text-teal-400",
+  hyperliquid: "bg-emerald-500/20 text-emerald-400",
 };
 
 const chainLabels: Record<Chain, string> = {
@@ -19,6 +20,7 @@ const chainLabels: Record<Chain, string> = {
   base: "BASE",
   polygon: "POLY",
   solana: "SOL",
+  hyperliquid: "HL",
 };
 
 export function ChainBadge({ chain, className }: { chain: Chain; className?: string }) {

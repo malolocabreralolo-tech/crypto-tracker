@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import type { Chain, TokenBalance, DeFiPosition, Transaction, PortfolioSnapshot, Wallet } from "@/types";
+import type { HyperliquidData } from "@/hooks/useHyperliquid";
 
 interface AppContextType {
   selectedWallet: string | null;
@@ -12,6 +13,7 @@ interface AppContextType {
   balances: TokenBalance[];
   positions: DeFiPosition[];
   transactions: Transaction[];
+  hyperliquidData: HyperliquidData[];
   totalValue: number;
   byChain: Partial<Record<Chain, number>>;
   byWallet: Record<string, number>;

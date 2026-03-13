@@ -6,18 +6,23 @@ import { PortfolioChart } from "@/components/dashboard/PortfolioChart";
 import { TokensTable } from "@/components/dashboard/TokensTable";
 import { DeFiPositions } from "@/components/dashboard/DeFiPositions";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { HyperliquidPositions } from "@/components/dashboard/HyperliquidPositions";
+import { EmptyState } from "@/components/dashboard/EmptyState";
+import { DashboardSkeleton } from "@/components/common/Skeleton";
 import { useAppContext } from "@/components/layout/AppShell";
 import { cn } from "@/lib/utils";
-import { Coins, Layers, Clock } from "lucide-react";
+import { Coins, Layers, Clock, TrendingUp } from "lucide-react";
 
-type Tab = "tokens" | "defi" | "activity";
+type Tab = "tokens" | "defi" | "hyperliquid" | "activity";
 
 export default function DashboardPage() {
   const {
+    wallets,
     totalValue,
     topHoldings,
     positions,
     transactions,
+    hyperliquidData,
     history,
     loading,
     error,
@@ -91,6 +96,18 @@ export default function DashboardPage() {
     return { change24h: changeAmt, changePct24h: changePct };
   }, [history, totalValue, filteredTotalValue, selectedWallet]);
 
+  const filteredHL = useMemo(
+    () =>
+      selectedWallet
+        ? hyperliquidData.filter(
+            (h) => h.walletAddress.toLowerCase() === selectedWallet.toLowerCase()
+          )
+        : hyperliquidData,
+    [hyperliquidData, selectedWallet]
+  );
+
+  const hlPositionCount = filteredHL.reduce((s, a) => s + a.positions.length, 0);
+
   const tabs: { id: Tab; label: string; icon: typeof Coins; count?: number }[] = [
     {
       id: "tokens",
@@ -99,8 +116,19 @@ export default function DashboardPage() {
       count: filteredHoldings.filter((h) => h.valueUsd > 0.01).length,
     },
     { id: "defi", label: "DeFi", icon: Layers, count: filteredPositions.length },
+    { id: "hyperliquid", label: "Hyperliquid", icon: TrendingUp, count: hlPositionCount },
     { id: "activity", label: "Activity", icon: Clock, count: filteredTransactions.length },
   ];
+
+  // Show empty state when no wallets
+  if (wallets.length === 0 && !loading) {
+    return <EmptyState />;
+  }
+
+  // Show skeleton while first load
+  if (loading && topHoldings.length === 0 && !lastUpdated) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-6">
@@ -170,6 +198,7 @@ export default function DashboardPage() {
           <TokensTable holdings={filteredHoldings} totalValue={filteredTotalValue} />
         )}
         {activeTab === "defi" && <DeFiPositions positions={filteredPositions} />}
+        {activeTab === "hyperliquid" && <HyperliquidPositions accounts={filteredHL} />}
         {activeTab === "activity" && <ActivityFeed transactions={filteredTransactions} />}
       </div>
     </div>

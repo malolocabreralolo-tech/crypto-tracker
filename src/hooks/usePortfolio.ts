@@ -5,6 +5,7 @@ import { useWallets } from "./useWallets";
 import { useBalances } from "./useBalances";
 import { useDeFiPositions } from "./useDeFiPositions";
 import { useTransactions } from "./useTransactions";
+import { useHyperliquid } from "./useHyperliquid";
 import type { Chain, PortfolioSnapshot } from "@/types";
 
 const HISTORY_KEY = "crypto-tracker-portfolio-history";
@@ -29,6 +30,7 @@ export function usePortfolio() {
   const { balances, loading: balancesLoading, error: balancesError, lastUpdated, fetchBalances } = useBalances();
   const { positions, loading: defiLoading, fetchPositions } = useDeFiPositions();
   const { transactions, loading: txLoading, fetchTransactions } = useTransactions();
+  const { data: hyperliquidData, loading: hlLoading, fetchHyperliquid } = useHyperliquid();
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
   const historyLoadedRef = useRef(false);
 
@@ -41,11 +43,13 @@ export function usePortfolio() {
   }, []);
   const hasFetchedRef = useRef(false);
 
-  const loading = balancesLoading || defiLoading || txLoading;
+  const loading = balancesLoading || defiLoading || txLoading || hlLoading;
 
-  // Total portfolio value
+  // Total portfolio value (includes Hyperliquid account values)
+  const hlTotalValue = hyperliquidData.reduce((sum, a) => sum + a.accountValue, 0);
   const totalValue = balances.reduce((sum, b) => sum + b.valueUsd, 0)
-    + positions.reduce((sum, p) => sum + p.totalValueUsd, 0);
+    + positions.reduce((sum, p) => sum + p.totalValueUsd, 0)
+    + hlTotalValue;
 
   // Value per chain
   const byChain: Partial<Record<Chain, number>> = {};
@@ -55,6 +59,9 @@ export function usePortfolio() {
   for (const p of positions) {
     byChain[p.chain] = (byChain[p.chain] || 0) + p.totalValueUsd;
   }
+  if (hlTotalValue > 0) {
+    byChain['hyperliquid'] = hlTotalValue;
+  }
 
   // Value per wallet
   const byWallet: Record<string, number> = {};
@@ -63,6 +70,9 @@ export function usePortfolio() {
   }
   for (const p of positions) {
     byWallet[p.walletAddress] = (byWallet[p.walletAddress] || 0) + p.totalValueUsd;
+  }
+  for (const hl of hyperliquidData) {
+    byWallet[hl.walletAddress] = (byWallet[hl.walletAddress] || 0) + hl.accountValue;
   }
 
   // Top holdings (sorted by value)
@@ -74,8 +84,9 @@ export function usePortfolio() {
       fetchBalances(wallets),
       fetchPositions(wallets),
       fetchTransactions(wallets),
+      fetchHyperliquid(wallets),
     ]);
-  }, [wallets, fetchBalances, fetchPositions, fetchTransactions]);
+  }, [wallets, fetchBalances, fetchPositions, fetchTransactions, fetchHyperliquid]);
 
   // Auto-fetch on wallet change — use wallets directly, not refresh
   useEffect(() => {
@@ -87,9 +98,10 @@ export function usePortfolio() {
         fetchBalances(wallets),
         fetchPositions(wallets),
         fetchTransactions(wallets),
+        fetchHyperliquid(wallets),
       ]);
     }
-  }, [loaded, wallets, fetchBalances, fetchPositions, fetchTransactions]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loaded, wallets, fetchBalances, fetchPositions, fetchTransactions, fetchHyperliquid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save snapshot when value changes — at most one per 5 minutes
   useEffect(() => {
@@ -114,6 +126,7 @@ export function usePortfolio() {
     balances,
     positions,
     transactions,
+    hyperliquidData,
     totalValue,
     byChain,
     byWallet,

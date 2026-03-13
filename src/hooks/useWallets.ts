@@ -24,7 +24,18 @@ export function useWallets() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setWallets(loadWallets());
+    const loaded = loadWallets();
+    // Migrate: add hyperliquid chain to existing EVM wallets that don't have it
+    let migrated = false;
+    const updated = loaded.map((w) => {
+      if (w.chains.includes("ethereum") && !w.chains.includes("hyperliquid")) {
+        migrated = true;
+        return { ...w, chains: [...w.chains, "hyperliquid" as Chain] };
+      }
+      return w;
+    });
+    if (migrated) saveWallets(updated);
+    setWallets(updated);
     setLoaded(true);
   }, []);
 

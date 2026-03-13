@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchEVMAllChainBalances } from "@/lib/providers/alchemy";
 import { fetchSolanaBalances } from "@/lib/providers/helius";
+import { fetchHyperliquidBalances } from "@/lib/providers/hyperliquid";
 import type { Chain } from "@/types";
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY || "";
@@ -14,8 +15,9 @@ export async function GET(req: NextRequest) {
   }
 
   const chains = chainsParam.split(",").filter(Boolean) as Chain[];
-  const evmChains = chains.filter((c) => c !== "solana");
+  const evmChains = chains.filter((c) => c !== "solana" && c !== "hyperliquid");
   const hasSolana = chains.includes("solana");
+  const hasHyperliquid = chains.includes("hyperliquid");
 
   try {
     const results = await Promise.all([
@@ -24,6 +26,9 @@ export async function GET(req: NextRequest) {
         : Promise.resolve([]),
       hasSolana && HELIUS_KEY
         ? fetchSolanaBalances(address, HELIUS_KEY)
+        : Promise.resolve([]),
+      hasHyperliquid
+        ? fetchHyperliquidBalances(address)
         : Promise.resolve([]),
     ]);
 

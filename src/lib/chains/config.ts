@@ -46,10 +46,16 @@ export const CHAIN_CONFIG: Record<Chain, ChainConfig> = {
     explorerUrl: 'https://solscan.io',
     rpcUrl: 'https://api.mainnet-beta.solana.com',
   },
+  hyperliquid: {
+    id: 'hyperliquid', chainId: null, name: 'Hyperliquid',
+    nativeCurrency: { symbol: 'USDC', decimals: 6 },
+    explorerUrl: 'https://app.hyperliquid.xyz',
+    rpcUrl: 'https://api.hyperliquid.xyz',
+  },
 };
 
 export const EVM_CHAINS: Chain[] = ['ethereum', 'arbitrum', 'optimism', 'base', 'polygon'];
-export const ALL_CHAINS: Chain[] = [...EVM_CHAINS, 'solana'];
+export const ALL_CHAINS: Chain[] = [...EVM_CHAINS, 'solana', 'hyperliquid'];
 
 export function getExplorerTxUrl(chain: Chain, hash: string): string {
   return `${CHAIN_CONFIG[chain].explorerUrl}/tx/${hash}`;
@@ -57,5 +63,6 @@ export function getExplorerTxUrl(chain: Chain, hash: string): string {
 
 export function getExplorerAddressUrl(chain: Chain, address: string): string {
   if (chain === 'solana') return `${CHAIN_CONFIG[chain].explorerUrl}/account/${address}`;
+  if (chain === 'hyperliquid') return `${CHAIN_CONFIG[chain].explorerUrl}/explorer/address/${address}`;
   return `${CHAIN_CONFIG[chain].explorerUrl}/address/${address}`;
 }

@@ -1,4 +1,4 @@
-export type Chain = 'ethereum' | 'arbitrum' | 'optimism' | 'base' | 'polygon' | 'solana';
+export type Chain = 'ethereum' | 'arbitrum' | 'optimism' | 'base' | 'polygon' | 'solana' | 'hyperliquid';
 
 export interface Wallet {
   id: string;

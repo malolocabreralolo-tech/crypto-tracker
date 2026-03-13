@@ -12,6 +12,9 @@ import {
   Wallet,
   ChevronDown,
   ChevronRight,
+  Copy,
+  Check,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -33,6 +36,7 @@ const navItems = [
   { href: "/", label: "Portfolio", icon: LayoutDashboard },
   { href: "/explore", label: "Explore", icon: Compass },
   { href: "/history", label: "Activity", icon: Clock },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -49,6 +53,14 @@ export function Sidebar({ selectedWallet, onSelectWallet, totalValue = 0, wallet
   const [newAddress, setNewAddress] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [walletsExpanded, setWalletsExpanded] = useState(true);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+
+  const copyAddress = (addr: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(addr);
+    setCopiedAddress(addr);
+    setTimeout(() => setCopiedAddress(null), 1500);
+  };
 
   const handleAdd = () => {
     const trimmed = newAddress.trim();
@@ -56,10 +68,11 @@ export function Sidebar({ selectedWallet, onSelectWallet, totalValue = 0, wallet
     const type = detectAddressType(trimmed);
     if (!type) return;
 
+    // EVM wallets also get Hyperliquid by default (uses same 0x address)
     const chains: Chain[] =
       type === "solana"
         ? ["solana"]
-        : ["ethereum", "arbitrum", "optimism", "base", "polygon"];
+        : ["ethereum", "arbitrum", "optimism", "base", "polygon", "hyperliquid"];
 
     addWallet(trimmed, newLabel.trim() || `Wallet ${wallets.length + 1}`, chains);
     setNewAddress("");
@@ -159,9 +172,17 @@ export function Sidebar({ selectedWallet, onSelectWallet, totalValue = 0, wallet
                 >
                   <div className="min-w-0">
                     <div className="font-medium truncate text-[12px]">{w.label}</div>
-                    <div className="text-[10px] opacity-60 font-mono">
+                    <button
+                      onClick={(e) => copyAddress(w.address, e)}
+                      className="text-[10px] opacity-60 font-mono hover:opacity-100 transition-opacity flex items-center gap-1"
+                    >
                       {abbrevAddress(w.address)}
-                    </div>
+                      {copiedAddress === w.address ? (
+                        <Check className="h-2.5 w-2.5 text-[var(--color-gain)]" />
+                      ) : (
+                        <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100" />
+                      )}
+                    </button>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {val > 0 && (

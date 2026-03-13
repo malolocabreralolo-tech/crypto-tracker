@@ -142,6 +142,7 @@ export default function SettingsPage() {
             { label: "Ethereum / L2s", value: "Public RPCs (PublicNode)", status: "active" },
             { label: "Solana", value: settings.heliusApiKey ? "Helius API" : "Not configured", status: settings.heliusApiKey ? "active" : "inactive" },
             { label: "Token Prices", value: "DeFi Llama API", status: "active" },
+            { label: "Hyperliquid", value: "Direct API (no key needed)", status: "active" },
             { label: "DeFi Positions", value: "On-chain detection (Lido, Aave, Uniswap, Raydium)", status: "active" },
           ].map((source) => (
             <div

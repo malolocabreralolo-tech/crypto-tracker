@@ -147,3 +147,28 @@
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.4 0.01 250);
 }
+
+/* Smooth skeleton animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Table row hover transition */
+tr {
+  transition: background-color 0.15s ease;
+}
+
+/* Fade in for new content */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}

@@ -11,6 +11,7 @@ const CHAIN_TO_LLAMA: Record<Chain, string> = {
   base: 'base',
   polygon: 'polygon',
   solana: 'solana',
+  hyperliquid: 'hyperliquid',
 };
 
 // Native token coingecko IDs for price lookup
