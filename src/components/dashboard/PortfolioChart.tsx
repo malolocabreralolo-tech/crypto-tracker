@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -10,43 +10,84 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import type { PortfolioSnapshot } from "@/types";
+import type { TokenBalance } from "@/types";
+import { ChartSkeleton } from "@/components/common/Skeleton";
 
-type Period = "24H" | "1W" | "1M" | "3M" | "1Y" | "ALL";
+type Period = "24H" | "1W" | "1M" | "3M" | "1Y";
 
 interface PortfolioChartProps {
-  history: PortfolioSnapshot[];
+  balances: TokenBalance[];
 }
 
-const periodMs: Record<Period, number> = {
-  "24H": 24 * 60 * 60 * 1000,
-  "1W": 7 * 24 * 60 * 60 * 1000,
-  "1M": 30 * 24 * 60 * 60 * 1000,
-  "3M": 90 * 24 * 60 * 60 * 1000,
-  "1Y": 365 * 24 * 60 * 60 * 1000,
-  ALL: Infinity,
-};
+interface HistoryPoint {
+  timestamp: number;
+  totalValueUsd: number;
+}
 
-export function PortfolioChart({ history }: PortfolioChartProps) {
+export function PortfolioChart({ balances }: PortfolioChartProps) {
   const [period, setPeriod] = useState<Period>("1M");
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const now = Date.now();
-  const filtered =
-    period === "ALL"
-      ? history
-      : history.filter((s) => now - s.timestamp < periodMs[period]);
+  // Stabilize balances reference — only recompute when actual data changes
+  const holdingsKey = useMemo(
+    () =>
+      balances
+        .map((b) => `${b.chain}:${b.contractAddress}:${b.balanceFormatted.toFixed(4)}`)
+        .sort()
+        .join("|"),
+    [balances]
+  );
 
-  // Remove invalid snapshots (saved before prices loaded)
-  const validFiltered = filtered.filter((s) => s.totalValueUsd > 1);
+  useEffect(() => {
+    if (balances.length === 0) {
+      setHistory([]);
+      return;
+    }
 
-  // If only 1 snapshot, duplicate to draw a flat line
-  let chartSnapshots = validFiltered;
-  if (validFiltered.length === 1) {
-    const s = filtered[0];
-    chartSnapshots = [{ ...s, timestamp: s.timestamp - 3600000 }, s];
-  }
+    // Abort previous request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-  const data = chartSnapshots.map((s) => ({
+    setLoading(true);
+
+    const holdings = balances.map((b) => ({
+      chain: b.chain,
+      contractAddress: b.contractAddress,
+      balanceFormatted: b.balanceFormatted,
+      symbol: b.symbol,
+    }));
+
+    fetch("/api/portfolio-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ holdings, period }),
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setHistory(data.history || []);
+        }
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("[PortfolioChart] fetch error:", err);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdingsKey, period]);
+
+  const data = history.map((s) => ({
     date: new Date(s.timestamp).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -67,7 +108,7 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
   return (
     <div>
       {/* Period change info */}
-      {data.length >= 2 && validFiltered.length >= 2 && (
+      {data.length >= 2 && (
         <div className="flex items-center gap-2 mb-3">
           <span
             className={cn(
@@ -95,7 +136,9 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
 
       {/* Chart */}
       <div className="relative">
-        {data.length === 0 ? (
+        {loading ? (
+          <ChartSkeleton />
+        ) : data.length === 0 ? (
           <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">
             Add a wallet to start tracking your portfolio
           </div>
@@ -147,7 +190,8 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
                   padding: "8px 12px",
                   boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
                 }}
-                formatter={(value) => [
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={(value: any) => [
                   `$${Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
                   "Value",
                 ]}
@@ -168,7 +212,7 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
 
       {/* Period selector */}
       <div className="flex gap-1 mt-4 justify-center">
-        {(["24H", "1W", "1M", "3M", "1Y", "ALL"] as Period[]).map((p) => (
+        {(["24H", "1W", "1M", "3M", "1Y"] as Period[]).map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}

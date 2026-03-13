@@ -150,7 +150,8 @@ export default function DashboardPage() {
       />
 
       {/* Portfolio Chart */}
-      {!selectedWallet && <PortfolioChart history={history} />}
+      {!selectedWallet && <PortfolioChart balances={topHoldings} />}
+      {selectedWallet && <PortfolioChart balances={filteredHoldings} />}
 
       {/* Tabs */}
       <div className="border-b border-border/20">
