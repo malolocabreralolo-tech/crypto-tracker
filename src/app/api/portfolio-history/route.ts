@@ -9,6 +9,9 @@ const PERIOD_CONFIG: Record<string, { seconds: number; span: number }> = {
   "1M": { seconds: 2592000, span: 200 },
   "3M": { seconds: 7776000, span: 200 },
   "1Y": { seconds: 31536000, span: 365 },
+  "2Y": { seconds: 63072000, span: 400 },
+  "5Y": { seconds: 157680000, span: 500 },
+  "ALL": { seconds: 315360000, span: 500 }, // ~10 years
 };
 
 // Map our chains to DeFiLlama identifiers
