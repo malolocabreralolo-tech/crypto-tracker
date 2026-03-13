@@ -2,16 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 
 const LLAMA_CHART_URL = "https://coins.llama.fi/chart";
 
-// span = number of data points (max 500 per DeFiLlama API)
-const PERIOD_CONFIG: Record<string, { seconds: number; span: number }> = {
-  "24H": { seconds: 86400, span: 96 },
-  "1W": { seconds: 604800, span: 168 },
-  "1M": { seconds: 2592000, span: 200 },
-  "3M": { seconds: 7776000, span: 200 },
-  "1Y": { seconds: 31536000, span: 365 },
-  "2Y": { seconds: 63072000, span: 400 },
-  "5Y": { seconds: 157680000, span: 500 },
+// Each chunk fetches ~1 year of data with span=365 (~1 point/day)
+const ONE_YEAR = 31536000;
+
+const PERIOD_CONFIG: Record<string, { seconds: number }> = {
+  "24H": { seconds: 86400 },
+  "1W": { seconds: 604800 },
+  "1M": { seconds: 2592000 },
+  "3M": { seconds: 7776000 },
+  "1Y": { seconds: ONE_YEAR },
+  "2Y": { seconds: ONE_YEAR * 2 },
+  "5Y": { seconds: ONE_YEAR * 5 },
 };
+
+// Span per chunk — DeFiLlama returns exactly this many points per request
+function getSpanForRange(rangeSeconds: number): number {
+  if (rangeSeconds <= 86400) return 96;       // 24H: ~15min intervals
+  if (rangeSeconds <= 604800) return 168;     // 1W: ~1h intervals
+  if (rangeSeconds <= 2592000) return 200;    // 1M
+  if (rangeSeconds <= ONE_YEAR) return 365;   // up to 1Y: daily
+  return 365; // chunk size for multi-year
+}
 
 // Map our chains to DeFiLlama identifiers
 const CHAIN_TO_LLAMA: Record<string, string> = {
@@ -52,6 +63,58 @@ interface HoldingInput {
   symbol: string;
 }
 
+interface PricePoint {
+  timestamp: number;
+  price: number;
+}
+
+async function fetchChartChunked(
+  coinKey: string,
+  startTs: number,
+  endTs: number,
+): Promise<PricePoint[]> {
+  const totalRange = endTs - startTs;
+
+  // For ranges <= 1 year, single request
+  if (totalRange <= ONE_YEAR) {
+    const span = getSpanForRange(totalRange);
+    const url = `${LLAMA_CHART_URL}/${coinKey}?start=${startTs}&span=${span}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data?.coins?.[coinKey]?.prices || [];
+  }
+
+  // For multi-year ranges, fetch in 1-year chunks
+  const allPrices: PricePoint[] = [];
+  const seen = new Set<number>();
+  let chunkStart = startTs;
+
+  while (chunkStart < endTs) {
+    const chunkEnd = Math.min(chunkStart + ONE_YEAR, endTs);
+    const span = 365;
+    const url = `${LLAMA_CHART_URL}/${coinKey}?start=${chunkStart}&span=${span}`;
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const prices: PricePoint[] = data?.coins?.[coinKey]?.prices || [];
+        for (const p of prices) {
+          if (!seen.has(p.timestamp)) {
+            seen.add(p.timestamp);
+            allPrices.push(p);
+          }
+        }
+      }
+    } catch {
+      // skip failed chunk
+    }
+    chunkStart = chunkEnd;
+  }
+
+  return allPrices.sort((a, b) => a.timestamp - b.timestamp);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -88,41 +151,21 @@ export async function POST(req: NextRequest) {
     const now = Math.floor(Date.now() / 1000);
     const start = now - config.seconds;
 
-    // Fetch price histories in parallel
+    // Fetch price histories in parallel (with chunking for multi-year)
     const priceHistories = await Promise.all(
       entries.map(async (entry) => {
         try {
-          const url = `${LLAMA_CHART_URL}/${entry.key}?start=${start}&span=${config.span}`;
-          const res = await fetch(url);
-          if (!res.ok) return { key: entry.key, prices: [] };
-          const data = await res.json();
-          const coinData = data?.coins?.[entry.key];
-          if (!coinData?.prices) return { key: entry.key, prices: [] };
+          const prices = await fetchChartChunked(entry.key, start, now);
           return {
             key: entry.key,
             balance: entry.balance,
-            prices: coinData.prices as { timestamp: number; price: number }[],
+            prices,
           };
         } catch {
-          return { key: entry.key, prices: [] };
+          return { key: entry.key, prices: [] as PricePoint[] };
         }
       })
     );
-
-    // Build a unified timeline
-    // Collect all unique timestamps
-    const allTimestamps = new Set<number>();
-    for (const ph of priceHistories) {
-      for (const p of ph.prices) {
-        allTimestamps.add(p.timestamp);
-      }
-    }
-
-    const sortedTimestamps = [...allTimestamps].sort((a, b) => a - b);
-
-    if (sortedTimestamps.length === 0) {
-      return NextResponse.json({ history: [] });
-    }
 
     // For each coin, build a sorted price array for interpolation
     const coinSeries = priceHistories
@@ -131,6 +174,10 @@ export async function POST(req: NextRequest) {
         balance: ph.balance as number,
         prices: [...ph.prices].sort((a, b) => a.timestamp - b.timestamp),
       }));
+
+    if (coinSeries.length === 0) {
+      return NextResponse.json({ history: [] });
+    }
 
     // Add USDC/stablecoin balances as constant value
     let stableValue = 0;
@@ -142,21 +189,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Use timestamps from the coin with the most data points as the base timeline
-    // This avoids jagged charts from merging different-frequency timestamps
-    let baseTimestamps = sortedTimestamps;
-    if (coinSeries.length > 0) {
-      const longestSeries = coinSeries.reduce((a, b) =>
-        a.prices.length >= b.prices.length ? a : b
-      );
-      baseTimestamps = longestSeries.prices.map((p) => p.timestamp);
+    const longestSeries = coinSeries.reduce((a, b) =>
+      a.prices.length >= b.prices.length ? a : b
+    );
+    let baseTimestamps = longestSeries.prices.map((p) => p.timestamp);
 
-      // Start timeline only after all coins have data (avoid jumps from missing coins)
-      const latestFirstTs = Math.max(...coinSeries.map((c) => c.prices[0].timestamp));
-      baseTimestamps = baseTimestamps.filter((ts) => ts >= latestFirstTs);
-    }
+    // Start timeline only after all coins have data (avoid jumps from missing coins)
+    const latestFirstTs = Math.max(...coinSeries.map((c) => c.prices[0].timestamp));
+    baseTimestamps = baseTimestamps.filter((ts) => ts >= latestFirstTs);
 
     // Binary search: find last price at or before timestamp
-    function getPrice(prices: { timestamp: number; price: number }[], ts: number): number | null {
+    function getPrice(prices: PricePoint[], ts: number): number | null {
       let lo = 0, hi = prices.length - 1;
       if (hi < 0 || ts < prices[0].timestamp) return null;
       while (lo < hi) {
@@ -181,10 +224,10 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // Downsample if too many points (keep max 200)
+    // Downsample if too many points (keep max 300)
     let result = history;
-    if (result.length > 200) {
-      const step = Math.ceil(result.length / 200);
+    if (result.length > 300) {
+      const step = Math.ceil(result.length / 300);
       result = result.filter((_, i) => i % step === 0 || i === result.length - 1);
     }
 
