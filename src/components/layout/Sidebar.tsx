@@ -76,7 +76,7 @@ export function Sidebar({ selectedWallet, onSelectWallet, totalValue = 0, wallet
             <Wallet className="h-4 w-4 text-primary" />
           </div>
           <span className="font-bold text-sm tracking-widest text-foreground/90">
-            CRYPTO
+            CRYPTO TRACKER
           </span>
         </Link>
       </div>

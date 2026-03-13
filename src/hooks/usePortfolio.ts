@@ -29,7 +29,16 @@ export function usePortfolio() {
   const { balances, loading: balancesLoading, error: balancesError, lastUpdated, fetchBalances } = useBalances();
   const { positions, loading: defiLoading, fetchPositions } = useDeFiPositions();
   const { transactions, loading: txLoading, fetchTransactions } = useTransactions();
-  const [history, setHistory] = useState<PortfolioSnapshot[]>(loadHistory);
+  const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
+  const historyLoadedRef = useRef(false);
+
+  // Load history from localStorage on client only (avoids hydration mismatch)
+  useEffect(() => {
+    if (!historyLoadedRef.current) {
+      historyLoadedRef.current = true;
+      setHistory(loadHistory());
+    }
+  }, []);
   const hasFetchedRef = useRef(false);
 
   const loading = balancesLoading || defiLoading || txLoading;
@@ -84,7 +93,7 @@ export function usePortfolio() {
 
   // Save snapshot when value changes — at most one per 5 minutes
   useEffect(() => {
-    if (totalValue > 0 && lastUpdated) {
+    if (totalValue > 1 && lastUpdated) {
       const lastSnapshot = history[history.length - 1];
       const minInterval = 5 * 60 * 1000; // 5 minutes
       if (lastSnapshot && lastUpdated - lastSnapshot.timestamp < minInterval) return;

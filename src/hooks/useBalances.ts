@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { TokenBalance, Wallet } from "@/types";
 
 const CACHE_KEY = "crypto-tracker-balances";
@@ -28,16 +28,19 @@ function cacheBalances(data: TokenBalance[]) {
 }
 
 export function useBalances() {
-  const [balances, setBalances] = useState<TokenBalance[]>(() => {
-    const cached = getCachedBalances();
-    return cached?.data ?? [];
-  });
+  const [balances, setBalances] = useState<TokenBalance[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(() => {
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  // Load cache on client only (avoids hydration mismatch)
+  useEffect(() => {
     const cached = getCachedBalances();
-    return cached?.timestamp ?? null;
-  });
+    if (cached) {
+      setBalances(cached.data);
+      setLastUpdated(cached.timestamp);
+    }
+  }, []);
 
   const fetchBalances = useCallback(async (wallets: Wallet[]) => {
     if (wallets.length === 0) {
