@@ -122,15 +122,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ history: [] });
     }
 
-    // For each timestamp, calculate total portfolio value
-    // Build price maps per coin
-    const priceMaps = priceHistories.map((ph) => {
-      const map = new Map<number, number>();
-      for (const p of ph.prices) {
-        map.set(p.timestamp, p.price);
-      }
-      return { ...ph, priceMap: map };
-    });
+    // For each coin, build a sorted price array for interpolation
+    const coinSeries = priceHistories
+      .filter((ph) => ph.prices.length > 0 && ph.balance)
+      .map((ph) => ({
+        balance: ph.balance as number,
+        prices: [...ph.prices].sort((a, b) => a.timestamp - b.timestamp),
+      }));
 
     // Add USDC/stablecoin balances as constant value
     let stableValue = 0;
@@ -141,12 +139,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const history = sortedTimestamps.map((ts) => {
+    // Use timestamps from the coin with the most data points as the base timeline
+    // This avoids jagged charts from merging different-frequency timestamps
+    let baseTimestamps = sortedTimestamps;
+    if (coinSeries.length > 0) {
+      const longestSeries = coinSeries.reduce((a, b) =>
+        a.prices.length >= b.prices.length ? a : b
+      );
+      baseTimestamps = longestSeries.prices.map((p) => p.timestamp);
+    }
+
+    // Binary search: find last price at or before timestamp
+    function getPrice(prices: { timestamp: number; price: number }[], ts: number): number | null {
+      let lo = 0, hi = prices.length - 1;
+      if (hi < 0 || ts < prices[0].timestamp) return null;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (prices[mid].timestamp <= ts) lo = mid;
+        else hi = mid - 1;
+      }
+      return prices[lo].price;
+    }
+
+    const history = baseTimestamps.map((ts) => {
       let totalValue = stableValue;
-      for (const pm of priceMaps) {
-        const price = pm.priceMap.get(ts);
-        if (price !== undefined && pm.balance) {
-          totalValue += pm.balance * price;
+      for (const coin of coinSeries) {
+        const price = getPrice(coin.prices, ts);
+        if (price !== null) {
+          totalValue += coin.balance * price;
         }
       }
       return {
