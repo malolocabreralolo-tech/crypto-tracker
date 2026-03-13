@@ -1,11 +1,11 @@
 import type { Chain } from '@/types';
 
 const PUBLIC_RPCS: Record<string, string> = {
-  ethereum: 'https://rpc.ankr.com/eth',
-  arbitrum: 'https://rpc.ankr.com/arbitrum',
-  optimism: 'https://rpc.ankr.com/optimism',
-  base: 'https://rpc.ankr.com/base',
-  polygon: 'https://rpc.ankr.com/polygon',
+  ethereum: 'https://ethereum-rpc.publicnode.com',
+  arbitrum: 'https://arbitrum-one-rpc.publicnode.com',
+  optimism: 'https://optimism-rpc.publicnode.com',
+  base: 'https://base-rpc.publicnode.com',
+  polygon: 'https://polygon-bor-rpc.publicnode.com',
 };
 
 const BALANCE_OF_SELECTOR = '0x70a08231';
