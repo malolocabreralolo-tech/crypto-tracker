@@ -94,13 +94,13 @@ const PERIOD_TO_SECONDS: Record<string, number> = {
   '1y': 31536000,
 };
 
-// Map period to appropriate span (data point interval)
+// span = number of data points (max 500 per DeFiLlama API)
 const PERIOD_TO_SPAN: Record<string, number> = {
-  '1d': 300,      // 5 min intervals
-  '7d': 3600,     // 1 hour intervals
-  '30d': 14400,   // 4 hour intervals
-  '90d': 86400,   // 1 day intervals
-  '1y': 86400,    // 1 day intervals
+  '1d': 96,
+  '7d': 168,
+  '30d': 200,
+  '90d': 200,
+  '1y': 365,
 };
 
 export async function fetchPriceHistory(

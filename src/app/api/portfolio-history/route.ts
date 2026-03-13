@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 const LLAMA_CHART_URL = "https://coins.llama.fi/chart";
 
+// span = number of data points (max 500 per DeFiLlama API)
 const PERIOD_CONFIG: Record<string, { seconds: number; span: number }> = {
-  "24H": { seconds: 86400, span: 300 },
-  "1W": { seconds: 604800, span: 3600 },
-  "1M": { seconds: 2592000, span: 14400 },
-  "3M": { seconds: 7776000, span: 86400 },
-  "1Y": { seconds: 31536000, span: 86400 },
+  "24H": { seconds: 86400, span: 96 },
+  "1W": { seconds: 604800, span: 168 },
+  "1M": { seconds: 2592000, span: 200 },
+  "3M": { seconds: 7776000, span: 200 },
+  "1Y": { seconds: 31536000, span: 365 },
 };
 
 // Map our chains to DeFiLlama identifiers
