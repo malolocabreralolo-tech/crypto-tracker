@@ -1,0 +1,41 @@
+import { NextRequest, NextResponse } from "next/server";
+import { fetchEVMAllChainBalances } from "@/lib/providers/alchemy";
+import { fetchSolanaBalances } from "@/lib/providers/helius";
+import type { Chain } from "@/types";
+
+const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY || "";
+const HELIUS_KEY = process.env.HELIUS_API_KEY || "";
+
+export async function GET(req: NextRequest) {
+  const address = req.nextUrl.searchParams.get("address");
+  const chainsParam = req.nextUrl.searchParams.get("chains") || "";
+
+  if (!address) {
+    return NextResponse.json({ error: "address required" }, { status: 400 });
+  }
+
+  const chains = chainsParam.split(",").filter(Boolean) as Chain[];
+  const evmChains = chains.filter((c) => c !== "solana");
+  const hasSolana = chains.includes("solana");
+
+  try {
+    const results = await Promise.all([
+      evmChains.length > 0
+        ? fetchEVMAllChainBalances(address, evmChains, ALCHEMY_KEY || undefined)
+        : Promise.resolve([]),
+      hasSolana && HELIUS_KEY
+        ? fetchSolanaBalances(address, HELIUS_KEY)
+        : Promise.resolve([]),
+    ]);
+
+    const balances = results.flat().map((b) => ({
+      ...b,
+      walletAddress: address,
+    }));
+
+    return NextResponse.json({ balances });
+  } catch (error) {
+    console.error("[api/balances]", error);
+    return NextResponse.json({ error: "Failed to fetch balances" }, { status: 500 });
+  }
+}
