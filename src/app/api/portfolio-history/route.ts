@@ -147,6 +147,10 @@ export async function POST(req: NextRequest) {
         a.prices.length >= b.prices.length ? a : b
       );
       baseTimestamps = longestSeries.prices.map((p) => p.timestamp);
+
+      // Start timeline only after all coins have data (avoid jumps from missing coins)
+      const latestFirstTs = Math.max(...coinSeries.map((c) => c.prices[0].timestamp));
+      baseTimestamps = baseTimestamps.filter((ts) => ts >= latestFirstTs);
     }
 
     // Binary search: find last price at or before timestamp
