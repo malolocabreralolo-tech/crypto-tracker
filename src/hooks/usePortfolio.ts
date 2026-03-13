@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useWallets } from "./useWallets";
 import { useBalances } from "./useBalances";
 import { useDeFiPositions } from "./useDeFiPositions";
@@ -30,6 +30,7 @@ export function usePortfolio() {
   const { positions, loading: defiLoading, fetchPositions } = useDeFiPositions();
   const { transactions, loading: txLoading, fetchTransactions } = useTransactions();
   const [history, setHistory] = useState<PortfolioSnapshot[]>(loadHistory);
+  const hasFetchedRef = useRef(false);
 
   const loading = balancesLoading || defiLoading || txLoading;
 
@@ -67,12 +68,19 @@ export function usePortfolio() {
     ]);
   }, [wallets, fetchBalances, fetchPositions, fetchTransactions]);
 
-  // Auto-fetch on wallet change
+  // Auto-fetch on wallet change — use wallets directly, not refresh
   useEffect(() => {
     if (loaded && wallets.length > 0) {
-      refresh();
+      // Prevent double-fetch on mount with cached data
+      if (hasFetchedRef.current && balances.length > 0) return;
+      hasFetchedRef.current = true;
+      Promise.all([
+        fetchBalances(wallets),
+        fetchPositions(wallets),
+        fetchTransactions(wallets),
+      ]);
     }
-  }, [loaded, wallets.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loaded, wallets, fetchBalances, fetchPositions, fetchTransactions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save snapshot when value changes — at most one per 5 minutes
   useEffect(() => {
