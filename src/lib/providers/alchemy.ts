@@ -1,105 +1,86 @@
-import { Alchemy, AssetTransfersCategory, SortingOrder, Utils } from 'alchemy-sdk';
 import type { Chain, TokenBalance, Transaction } from '@/types';
-import { CHAIN_CONFIG } from '@/lib/chains/config';
 
-const DEMO_API_KEY = 'demo'; // Alchemy allows 'demo' for limited usage
+const ANKR_URL = 'https://rpc.ankr.com/multichain';
 
-// Cache Alchemy instances per chain+key
-const instanceCache = new Map<string, Alchemy>();
+// Map our chain names to Ankr blockchain identifiers
+const CHAIN_TO_ANKR: Record<string, string> = {
+  ethereum: 'eth',
+  arbitrum: 'arbitrum',
+  optimism: 'optimism',
+  base: 'base',
+  polygon: 'polygon',
+};
 
-export function getAlchemy(chain: Chain, apiKey?: string): Alchemy {
-  const key = apiKey || DEMO_API_KEY;
-  const config = CHAIN_CONFIG[chain];
+const ANKR_TO_CHAIN: Record<string, Chain> = {
+  eth: 'ethereum',
+  arbitrum: 'arbitrum',
+  optimism: 'optimism',
+  base: 'base',
+  polygon: 'polygon',
+};
 
-  if (!config.alchemyNetwork) {
-    throw new Error(`Chain ${chain} is not an EVM chain supported by Alchemy`);
-  }
-
-  const cacheKey = `${chain}:${key}`;
-  const cached = instanceCache.get(cacheKey);
-  if (cached) return cached;
-
-  const instance = new Alchemy({
-    apiKey: key,
-    network: config.alchemyNetwork,
+async function ankrCall(method: string, params: Record<string, unknown>) {
+  const res = await fetch(ANKR_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method,
+      id: 1,
+      params,
+    }),
   });
 
-  instanceCache.set(cacheKey, instance);
-  return instance;
+  if (!res.ok) {
+    throw new Error(`Ankr API error: ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (data.error) {
+    throw new Error(`Ankr RPC error: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+
+  return data.result;
 }
 
 export async function fetchEVMBalances(
   address: string,
   chain: Chain,
-  apiKey?: string,
+  _apiKey?: string,
 ): Promise<TokenBalance[]> {
+  const ankrChain = CHAIN_TO_ANKR[chain];
+  if (!ankrChain) return [];
+
   try {
-    const alchemy = getAlchemy(chain, apiKey);
-    const config = CHAIN_CONFIG[chain];
-    const balances: TokenBalance[] = [];
-
-    // Fetch native balance (ETH/POL)
-    const nativeBalanceWei = await alchemy.core.getBalance(address);
-    const nativeBalance = parseFloat(Utils.formatEther(nativeBalanceWei));
-    if (nativeBalance > 0) {
-      balances.push({
-        chain,
-        walletAddress: address,
-        contractAddress: '0x0000000000000000000000000000000000000000',
-        symbol: config.nativeCurrency.symbol,
-        name: config.nativeCurrency.symbol === 'POL' ? 'Polygon' : 'Ethereum',
-        decimals: config.nativeCurrency.decimals,
-        balance: nativeBalanceWei.toString(),
-        balanceFormatted: nativeBalance,
-        priceUsd: 0, // Will be filled by price provider
-        valueUsd: 0,
-      });
-    }
-
-    // Fetch ERC-20 token balances
-    const tokenBalancesResponse = await alchemy.core.getTokenBalances(address);
-
-    // Filter out zero balances and fetch metadata
-    const nonZeroBalances = tokenBalancesResponse.tokenBalances.filter(
-      (tb) => tb.tokenBalance && tb.tokenBalance !== '0x0' && tb.tokenBalance !== '0x' && BigInt(tb.tokenBalance || '0') > BigInt(0),
-    );
-
-    // Fetch metadata in parallel (limit concurrency to avoid rate limits)
-    const metadataPromises = nonZeroBalances.slice(0, 50).map(async (tb) => {
-      try {
-        const metadata = await alchemy.core.getTokenMetadata(tb.contractAddress);
-        const rawBalance = BigInt(tb.tokenBalance || '0');
-        const decimals = metadata.decimals || 18;
-        const balanceFormatted = Number(rawBalance) / Math.pow(10, decimals);
-
-        if (balanceFormatted < 0.000001) return null;
-
-        return {
-          chain,
-          walletAddress: address,
-          contractAddress: tb.contractAddress,
-          symbol: metadata.symbol || 'UNKNOWN',
-          name: metadata.name || 'Unknown Token',
-          decimals,
-          balance: rawBalance.toString(),
-          balanceFormatted,
-          priceUsd: 0,
-          valueUsd: 0,
-          logo: metadata.logo || undefined,
-        } satisfies TokenBalance;
-      } catch {
-        return null;
-      }
+    const result = await ankrCall('ankr_getAccountBalance', {
+      walletAddress: address,
+      blockchain: [ankrChain],
+      onlyWhitelisted: true,
+      pageSize: 100,
     });
 
-    const results = await Promise.all(metadataPromises);
-    for (const r of results) {
-      if (r) balances.push(r);
-    }
+    const assets = result?.assets || [];
 
-    return balances;
+    return assets
+      .filter((a: any) => {
+        const bal = parseFloat(a.balance || '0');
+        return bal > 0.000001;
+      })
+      .map((a: any) => ({
+        chain,
+        walletAddress: address,
+        contractAddress: a.contractAddress || '0x0000000000000000000000000000000000000000',
+        symbol: a.tokenSymbol || 'UNKNOWN',
+        name: a.tokenName || 'Unknown Token',
+        decimals: a.tokenDecimals || 18,
+        balance: a.balanceRawInteger || '0',
+        balanceFormatted: parseFloat(a.balance || '0'),
+        priceUsd: parseFloat(a.tokenPrice || '0'),
+        valueUsd: parseFloat(a.balanceUsd || '0'),
+        logo: a.thumbnail || undefined,
+      } satisfies TokenBalance));
   } catch (error) {
-    console.error(`[alchemy] Error fetching balances on ${chain} for ${address}:`, error);
+    console.error(`[ankr] Error fetching balances on ${chain} for ${address}:`, error);
     return [];
   }
 }
@@ -107,109 +88,53 @@ export async function fetchEVMBalances(
 export async function fetchEVMTransactions(
   address: string,
   chain: Chain,
-  apiKey?: string,
+  _apiKey?: string,
 ): Promise<Transaction[]> {
+  const ankrChain = CHAIN_TO_ANKR[chain];
+  if (!ankrChain) return [];
+
   try {
-    const alchemy = getAlchemy(chain, apiKey);
-    const addressLower = address.toLowerCase();
+    const result = await ankrCall('ankr_getTransactionsByAddress', {
+      address,
+      blockchain: [ankrChain],
+      descOrder: true,
+      pageSize: 50,
+    });
 
-    // Fetch both sent and received transfers
-    const [sentTransfers, receivedTransfers] = await Promise.all([
-      alchemy.core.getAssetTransfers({
-        fromAddress: address,
-        category: [
-          AssetTransfersCategory.EXTERNAL,
-          AssetTransfersCategory.ERC20,
-          AssetTransfersCategory.INTERNAL,
-        ],
-        order: SortingOrder.DESCENDING,
-        maxCount: 50,
-        withMetadata: true,
-      }),
-      alchemy.core.getAssetTransfers({
-        toAddress: address,
-        category: [
-          AssetTransfersCategory.EXTERNAL,
-          AssetTransfersCategory.ERC20,
-          AssetTransfersCategory.INTERNAL,
-        ],
-        order: SortingOrder.DESCENDING,
-        maxCount: 50,
-        withMetadata: true,
-      }),
-    ]);
+    const txs = result?.transactions || [];
 
-    const txMap = new Map<string, Transaction>();
+    return txs.map((t: any) => {
+      const value = t.value ? parseInt(t.value, 16) / 1e18 : 0;
+      const gasUsed = t.gasUsed ? parseInt(t.gasUsed, 16) : 0;
+      const gasPrice = t.gasPrice ? parseInt(t.gasPrice, 16) : 0;
+      const feeEth = (gasUsed * gasPrice) / 1e18;
 
-    const processTransfer = (
-      transfer: (typeof sentTransfers.transfers)[0],
-      direction: 'sent' | 'received',
-    ) => {
-      const hash = transfer.hash;
-      const existing = txMap.get(hash);
-
-      // Determine type
-      let type: Transaction['type'] = 'transfer';
-      if (transfer.category === 'erc20' && existing) {
-        type = 'swap'; // Multiple token movements in same tx = likely swap
-      }
-
-      const amount = transfer.value || 0;
-      const symbol = transfer.asset || 'ETH';
-      const tokenData = { symbol, amount, valueUsd: 0 };
-
-      if (existing) {
-        // If we already have this tx, it might be a swap
-        existing.type = 'swap';
-        if (direction === 'sent' && !existing.tokenIn) {
-          existing.tokenIn = tokenData;
-        } else if (direction === 'received' && !existing.tokenOut) {
-          existing.tokenOut = tokenData;
-        }
-        return;
-      }
-
-      const metadata = transfer.metadata as { blockTimestamp?: string } | undefined;
-      const timestamp = metadata?.blockTimestamp
-        ? new Date(metadata.blockTimestamp).getTime()
-        : Date.now();
+      const isSent = t.from?.toLowerCase() === address.toLowerCase();
 
       const tx: Transaction = {
         chain,
-        hash,
-        type,
-        from: transfer.from || '',
-        to: transfer.to || '',
-        timestamp,
-        fee: { amount: 0, valueUsd: 0 },
+        hash: t.hash || '',
+        type: t.input && t.input !== '0x' ? 'swap' : 'transfer',
+        from: t.from || '',
+        to: t.to || '',
+        timestamp: t.timestamp ? parseInt(t.timestamp, 16) * 1000 : Date.now(),
+        fee: { amount: feeEth, valueUsd: 0 },
         walletAddress: address,
       };
 
-      if (direction === 'sent') {
-        tx.tokenIn = tokenData;
-      } else {
-        tx.tokenOut = tokenData;
-      }
-
-      // Detect if it's a contract interaction (approve, stake, etc.)
-      if (transfer.to && transfer.from) {
-        const fromLower = transfer.from.toLowerCase();
-        const toLower = transfer.to.toLowerCase();
-        if (fromLower === addressLower && toLower === addressLower) {
-          tx.type = 'other';
+      if (value > 0) {
+        const nativeSymbol = chain === 'polygon' ? 'POL' : 'ETH';
+        if (isSent) {
+          tx.tokenIn = { symbol: nativeSymbol, amount: value, valueUsd: 0 };
+        } else {
+          tx.tokenOut = { symbol: nativeSymbol, amount: value, valueUsd: 0 };
         }
       }
 
-      txMap.set(hash, tx);
-    };
-
-    for (const t of sentTransfers.transfers) processTransfer(t, 'sent');
-    for (const t of receivedTransfers.transfers) processTransfer(t, 'received');
-
-    // Sort by timestamp descending
-    return Array.from(txMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+      return tx;
+    });
   } catch (error) {
-    console.error(`[alchemy] Error fetching transactions on ${chain} for ${address}:`, error);
+    console.error(`[ankr] Error fetching transactions on ${chain} for ${address}:`, error);
     return [];
   }
 }
@@ -217,11 +142,48 @@ export async function fetchEVMTransactions(
 export async function fetchEVMAllChainBalances(
   address: string,
   chains: Chain[],
-  apiKey?: string,
+  _apiKey?: string,
 ): Promise<TokenBalance[]> {
-  const evmChains = chains.filter((c) => c !== 'solana');
-  const results = await Promise.all(
-    evmChains.map((chain) => fetchEVMBalances(address, chain, apiKey)),
-  );
-  return results.flat();
+  // Ankr can fetch ALL chains in one call — much more efficient
+  const ankrChains = chains
+    .filter((c) => c !== 'solana')
+    .map((c) => CHAIN_TO_ANKR[c])
+    .filter(Boolean);
+
+  if (ankrChains.length === 0) return [];
+
+  try {
+    const result = await ankrCall('ankr_getAccountBalance', {
+      walletAddress: address,
+      blockchain: ankrChains,
+      onlyWhitelisted: true,
+      pageSize: 100,
+    });
+
+    const assets = result?.assets || [];
+
+    return assets
+      .filter((a: any) => parseFloat(a.balance || '0') > 0.000001)
+      .map((a: any) => {
+        const ankrChain = a.blockchain || 'eth';
+        const chain = ANKR_TO_CHAIN[ankrChain] || 'ethereum';
+
+        return {
+          chain,
+          walletAddress: address,
+          contractAddress: a.contractAddress || '0x0000000000000000000000000000000000000000',
+          symbol: a.tokenSymbol || 'UNKNOWN',
+          name: a.tokenName || 'Unknown Token',
+          decimals: a.tokenDecimals || 18,
+          balance: a.balanceRawInteger || '0',
+          balanceFormatted: parseFloat(a.balance || '0'),
+          priceUsd: parseFloat(a.tokenPrice || '0'),
+          valueUsd: parseFloat(a.balanceUsd || '0'),
+          logo: a.thumbnail || undefined,
+        } satisfies TokenBalance;
+      });
+  } catch (error) {
+    console.error(`[ankr] Error fetching all chain balances for ${address}:`, error);
+    return [];
+  }
 }

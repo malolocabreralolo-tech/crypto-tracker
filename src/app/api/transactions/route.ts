@@ -3,7 +3,6 @@ import { fetchEVMTransactions } from "@/lib/providers/alchemy";
 import { fetchSolanaTransactions } from "@/lib/providers/helius";
 import type { Chain } from "@/types";
 
-const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY || "";
 const HELIUS_KEY = process.env.HELIUS_API_KEY || "";
 
 export async function GET(req: NextRequest) {
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest) {
   try {
     const promises = [
       ...evmChains.map((chain) =>
-        fetchEVMTransactions(address, chain, ALCHEMY_KEY || undefined)
+        fetchEVMTransactions(address, chain)
           .then((txs) => txs.map((t) => ({ ...t, walletAddress: address })))
           .catch(() => [])
       ),

@@ -3,7 +3,6 @@ import { fetchEVMAllChainBalances } from "@/lib/providers/alchemy";
 import { fetchSolanaBalances } from "@/lib/providers/helius";
 import type { Chain } from "@/types";
 
-const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY || "";
 const HELIUS_KEY = process.env.HELIUS_API_KEY || "";
 
 export async function GET(req: NextRequest) {
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest) {
   try {
     const results = await Promise.all([
       evmChains.length > 0
-        ? fetchEVMAllChainBalances(address, evmChains, ALCHEMY_KEY || undefined)
+        ? fetchEVMAllChainBalances(address, evmChains)
         : Promise.resolve([]),
       hasSolana && HELIUS_KEY
         ? fetchSolanaBalances(address, HELIUS_KEY)
