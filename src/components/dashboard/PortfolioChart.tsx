@@ -105,6 +105,17 @@ export function PortfolioChart({ balances }: PortfolioChartProps) {
 
   const gradientId = `chart-gradient-${isUp ? "up" : "down"}`;
 
+  // Calculate Y-axis domain with padding to show price movements clearly
+  const values = data.map((d) => d.value);
+  const minVal = values.length > 0 ? Math.min(...values) : 0;
+  const maxVal = values.length > 0 ? Math.max(...values) : 0;
+  const range = maxVal - minVal;
+  const padding = range > 0 ? range * 0.15 : maxVal * 0.05;
+  const yDomain: [number, number] = [
+    Math.max(0, minVal - padding),
+    maxVal + padding,
+  ];
+
   return (
     <div>
       {/* Period change info */}
@@ -168,6 +179,7 @@ export function PortfolioChart({ balances }: PortfolioChartProps) {
                 interval="preserveStartEnd"
               />
               <YAxis
+                domain={yDomain}
                 tick={{ fontSize: 10, fill: "oklch(0.5 0.01 250)" }}
                 axisLine={false}
                 tickLine={false}
@@ -175,7 +187,7 @@ export function PortfolioChart({ balances }: PortfolioChartProps) {
                   v >= 1_000_000
                     ? `$${(v / 1_000_000).toFixed(1)}M`
                     : v >= 1_000
-                      ? `$${(v / 1_000).toFixed(0)}K`
+                      ? `$${(v / 1_000).toFixed(1)}K`
                       : `$${v.toFixed(0)}`
                 }
                 width={55}
