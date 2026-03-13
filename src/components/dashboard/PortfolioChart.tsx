@@ -36,9 +36,12 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
       ? history
       : history.filter((s) => now - s.timestamp < periodMs[period]);
 
+  // Remove invalid snapshots (saved before prices loaded)
+  const validFiltered = filtered.filter((s) => s.totalValueUsd > 1);
+
   // If only 1 snapshot, duplicate to draw a flat line
-  let chartSnapshots = filtered;
-  if (filtered.length === 1) {
+  let chartSnapshots = validFiltered;
+  if (validFiltered.length === 1) {
     const s = filtered[0];
     chartSnapshots = [{ ...s, timestamp: s.timestamp - 3600000 }, s];
   }
@@ -64,7 +67,7 @@ export function PortfolioChart({ history }: PortfolioChartProps) {
   return (
     <div>
       {/* Period change info */}
-      {data.length >= 2 && filtered.length >= 2 && (
+      {data.length >= 2 && validFiltered.length >= 2 && (
         <div className="flex items-center gap-2 mb-3">
           <span
             className={cn(

@@ -10,8 +10,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Crypto Tracker",
-  description: "Multi-chain crypto portfolio tracker",
+  title: "Crypto Tracker | Multi-Chain Portfolio",
+  description: "Track your crypto portfolio across Ethereum, Arbitrum, Optimism, Base, Polygon, and Solana. Real-time balances, DeFi positions, and transaction history.",
 };
 
 export default function RootLayout({

@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Wallet, Coins, Link2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { TopHoldings } from "@/components/dashboard/TopHoldings";
-import { ChainBreakdown } from "@/components/dashboard/ChainBreakdown";
+import { TokensTable } from "@/components/dashboard/TokensTable";
 import { DeFiPositions } from "@/components/dashboard/DeFiPositions";
-import { UsdValue } from "@/components/common/FormatValue";
 import { useWallets } from "@/hooks/useWallets";
+import { toast } from "sonner";
 import type { Chain, TokenBalance, DeFiPosition } from "@/types";
 
 function detectAddressType(address: string): "evm" | "solana" | null {
@@ -27,16 +25,14 @@ export default function ExplorePage() {
   const [explored, setExplored] = useState(false);
   const { wallets, addWallet } = useWallets();
 
-  const totalValue = balances.reduce((sum, b) => sum + b.valueUsd, 0)
-    + defiPositions.reduce((sum, p) => sum + p.totalValueUsd, 0);
+  const totalValue =
+    balances.reduce((sum, b) => sum + b.valueUsd, 0) +
+    defiPositions.reduce((sum, p) => sum + p.totalValueUsd, 0);
 
-  const byChain: Partial<Record<Chain, number>> = {};
-  for (const b of balances) {
-    byChain[b.chain] = (byChain[b.chain] || 0) + b.valueUsd;
-  }
-  for (const p of defiPositions) {
-    byChain[p.chain] = (byChain[p.chain] || 0) + p.totalValueUsd;
-  }
+  const chainsDetected = new Set([
+    ...balances.map((b) => b.chain),
+    ...defiPositions.map((p) => p.chain),
+  ]);
 
   const isAlreadyTracked = wallets.some(
     (w) => w.address.toLowerCase() === address.trim().toLowerCase()
@@ -65,7 +61,6 @@ export default function ExplorePage() {
       const newBalances: TokenBalance[] = [];
       const newPositions: DeFiPosition[] = [];
 
-      // Fetch balances + DeFi via API routes
       const [balRes, defiRes] = await Promise.all([
         fetch(`/api/balances?address=${trimmed}&chains=${chainsParam}`),
         type === "evm"
@@ -82,7 +77,7 @@ export default function ExplorePage() {
         newPositions.push(...(data.positions || []));
       }
 
-      // Fetch prices via API route
+      // Fetch prices
       try {
         const tokens = newBalances
           .filter((b) => b.contractAddress)
@@ -124,67 +119,139 @@ export default function ExplorePage() {
         ? ["solana"]
         : ["ethereum", "arbitrum", "optimism", "base", "polygon"];
     addWallet(trimmed, `Explored ${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`, chains);
+    toast.success("Wallet added to portfolio");
   };
 
   return (
-    <div className="space-y-4 max-w-[1400px]">
+    <div className="space-y-6 max-w-[1400px]">
+      {/* Header */}
       <div>
-        <h1 className="text-lg font-bold">Wallet Explorer</h1>
-        <p className="text-xs text-muted-foreground">
-          Explore any Ethereum/L2/Solana address
+        <h1 className="text-xl font-bold text-foreground">Wallet Explorer</h1>
+        <p className="text-[13px] text-muted-foreground mt-1">
+          Look up any Ethereum, L2, or Solana wallet address
         </p>
       </div>
 
-      <div className="flex gap-2">
-        <Input
-          placeholder="0x... or Solana address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          className="flex-1 font-mono text-xs"
-          onKeyDown={(e) => e.key === "Enter" && handleExplore()}
-        />
-        <Button onClick={handleExplore} disabled={loading || !address.trim()} className="gap-1.5">
-          <Search className="h-4 w-4" />
-          {loading ? "Loading..." : "Explore"}
-        </Button>
-        {explored && !isAlreadyTracked && balances.length > 0 && (
-          <Button variant="outline" onClick={handleAddToPortfolio} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            Track
+      {/* Search bar */}
+      <div className="rounded-xl border border-border/30 bg-white/[0.02] p-5">
+        <div className="flex gap-3">
+          <Input
+            placeholder="Enter wallet address (0x... or Solana)"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            className="flex-1 font-mono text-[13px] h-11 bg-white/[0.03] border-border/30 rounded-lg"
+            onKeyDown={(e) => e.key === "Enter" && handleExplore()}
+          />
+          <Button
+            onClick={handleExplore}
+            disabled={loading || !address.trim()}
+            className="gap-2 h-11 px-6 rounded-lg"
+          >
+            <Search className="h-4 w-4" />
+            {loading ? "Loading..." : "Explore"}
           </Button>
-        )}
+        </div>
       </div>
 
+      {/* Error */}
       {error && (
-        <Card className="p-3 border-destructive/50 bg-destructive/10">
-          <p className="text-xs text-destructive">{error}</p>
-        </Card>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+          <p className="text-[13px] text-[var(--color-loss)]">{error}</p>
+        </div>
       )}
 
-      {explored && (
+      {/* Results */}
+      {explored && !loading && (
         <>
-          <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-bold text-primary">
-              <UsdValue value={totalValue} />
-            </span>
-            <span className="text-xs text-muted-foreground font-mono">
-              {address.slice(0, 10)}...{address.slice(-6)}
-            </span>
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-xl border border-border/30 bg-white/[0.02] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Total Value
+                </span>
+              </div>
+              <span className="text-xl font-bold tabular-nums text-foreground">
+                ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="rounded-xl border border-border/30 bg-white/[0.02] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Coins className="h-4 w-4 text-muted-foreground" />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Tokens Found
+                </span>
+              </div>
+              <span className="text-xl font-bold tabular-nums text-foreground">
+                {balances.length}
+              </span>
+            </div>
+            <div className="rounded-xl border border-border/30 bg-white/[0.02] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Link2 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Chains
+                </span>
+              </div>
+              <span className="text-xl font-bold tabular-nums text-foreground">
+                {chainsDetected.size}
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-3">
-              <TopHoldings
-                holdings={balances.sort((a, b) => b.valueUsd - a.valueUsd)}
-                totalValue={totalValue}
-              />
+          {/* Add to Portfolio */}
+          {!isAlreadyTracked && balances.length > 0 && (
+            <div className="flex items-center gap-3 rounded-xl border border-border/30 bg-white/[0.02] p-4">
+              <div className="flex-1">
+                <p className="text-[13px] text-foreground font-medium">
+                  Track this wallet
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Add to your portfolio to monitor balances over time
+                </p>
+              </div>
+              <Button onClick={handleAddToPortfolio} variant="outline" className="gap-2 rounded-lg border-border/50">
+                <Plus className="h-4 w-4" />
+                Add to Portfolio
+              </Button>
             </div>
-            <div className="lg:col-span-2 space-y-4">
-              <ChainBreakdown byChain={byChain} totalValue={totalValue} />
+          )}
+
+          {isAlreadyTracked && (
+            <div className="rounded-xl border border-[var(--color-gain)]/20 bg-[var(--color-gain)]/5 p-4">
+              <p className="text-[13px] text-[var(--color-gain)]">
+                This wallet is already in your portfolio
+              </p>
+            </div>
+          )}
+
+          {/* Tokens table */}
+          <div className="rounded-xl border border-border/30 bg-white/[0.02] p-4">
+            <h2 className="text-lg font-bold text-foreground mb-4">Tokens</h2>
+            <TokensTable
+              holdings={balances.sort((a, b) => b.valueUsd - a.valueUsd)}
+              totalValue={totalValue}
+            />
+          </div>
+
+          {/* DeFi positions */}
+          {defiPositions.length > 0 && (
+            <div className="rounded-xl border border-border/30 bg-white/[0.02] p-4">
+              <h2 className="text-lg font-bold text-foreground mb-4">DeFi Positions</h2>
               <DeFiPositions positions={defiPositions} />
             </div>
-          </div>
+          )}
         </>
+      )}
+
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-[13px] text-muted-foreground animate-pulse">
+            Scanning wallet across chains...
+          </div>
+        </div>
       )}
     </div>
   );
